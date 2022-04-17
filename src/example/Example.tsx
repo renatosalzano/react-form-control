@@ -10,7 +10,7 @@ const formSchema = {
     alias: new FormControl("", {
       disabled: true,
     })
-      .when(["fristname", "lastname"])
+      .when(["personal.fristname", "personal.lastname"])
       .is()
       .then({ disabled: false }),
   },
@@ -19,9 +19,9 @@ const formSchema = {
 export const Example: FC = () => {
   return (
     <FormStore schema={formSchema}>
-      <ControlledTextInput name="fristname" value="" />
-      <ControlledTextInput name="lastname" value="" />
-      <ControlledTextInput name="alias" value="" />
+      <ControlledTextInput name="personal.fristname" value="" />
+      <ControlledTextInput name="personal.lastname" value="" />
+      <ControlledTextInput name="personal.alias" value="" />
     </FormStore>
   );
 };

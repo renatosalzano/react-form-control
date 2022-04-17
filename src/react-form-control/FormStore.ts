@@ -2,7 +2,7 @@
 import { useContext, createContext, createElement, FC, useRef, useState, useEffect } from "react";
 
 import { FormControl, FormControlThenOptions, Modifiers } from "./FormControl";
-import { useDebouce } from "./hooks/useDebounce";
+import { useDebouce, useDebouncer, useDebounceState } from "./hooks/useDebounce";
 import { isEqual } from "./util/isEqual";
 import { splitObject } from "./util/splitObject";
 
@@ -29,15 +29,15 @@ export const FormStore: FC<FormStoreProps> = ({ schema, children }) => {
 
 class FormGroup {
   public values: AnyObject;
-  private control: AnyObject;
+  private controls: { [key: string]: Control } = {};
   private path: { [key: string]: Control } = {};
   public slice: { [key: string]: SliceControl } = {};
 
   constructor(schema: { [key: string]: any }) {
     if (schema && typeof schema === "object") {
       this.values = schema;
-      this.control = schema;
       this.setPath(schema);
+      console.log(this.controls);
     } else {
       throw new Error("Schema must be an Object");
     }
@@ -48,19 +48,16 @@ class FormGroup {
     return Object.keys(object).reduce((result: string[], key) => {
       switch (true) {
         case object[key] instanceof FormControl:
-          console.log(object[key]);
-          const control = new Control(object[key]);
           const path = prefix + key;
-          this.path[key] = eval(`this.control.${path}`);
-          this.path[key] = control;
-          this.path[key].valueChanges.subscribe(eval(`(value) => this.values.${path} = value`));
-          eval(`this.values.${path} = this.path[key].value`);
-          this.injectDependencies(this.path[key]);
+          this.controls[path] = new Control(object[key]);
+          // OVERRIDE FORM CONTROL WITH VALUE
+          eval(`this.values.${path} = this.controls[path].value`);
+          // SUBSCRIBE VALUE
+          this.controls[path].valueChanges.subscribe(
+            eval(`(value) => this.values.${path} = value`),
+          );
+          this.injectDependencies(this.controls[path]);
           break;
-        /* case object[key] instanceof FormSlice:
-          console.log(prefix + key);
-          this.slice[key] = new SliceControl(object[key].schema);
-          break; */
         default:
           result = [...result, ...this.setPath(object[key], prefix + key)];
           break;
@@ -71,14 +68,15 @@ class FormGroup {
 
   private injectDependencies(control: Control) {
     if (control.hasModifiers()) {
-      for (const key of control.getDependencies()) {
-        const control = this.getControl(key);
+      for (const name of control.getDependencies()) {
+        const dependency = this.getControl(name);
+        dependency.valueChanges.subscribe((value) => control.testCondition(name, value));
       }
     }
   }
   public getControl(name: string) {
-    if (this.path[name] instanceof Control) {
-      return this.path[name];
+    if (this.controls[name] instanceof Control) {
+      return this.controls[name];
     } else {
       console.error(`${name} not found`);
       return new Control();
@@ -153,15 +151,21 @@ class Control {
       this.modifiers = modifiers;
       this.state.then = then;
       this.updateControl(defaultValue);
+      if (this.modifiers.dependencies.length) {
+        this.modifiers.dependencies.forEach((name) => {
+          this.cache[name] = null;
+        });
+      }
     }
   }
 
   private updateControl(options: Partial<ThenOptions>) {
+    console.log(options);
     if (options?.reset) return this.reset();
     if (options?.value !== undefined) this.value = options.value;
     if (options?.validator) this.validator = options.validator;
-    if (options?.touched === true) this.touched = options.touched;
-    if (options?.disabled === true) this.disabled = options.disabled;
+    if (options?.touched !== undefined) this.touched = options.touched;
+    if (options?.disabled !== undefined) this.disabled = options.disabled;
     if (options?.requiredGroup) this.requiredGroup = options.requiredGroup;
     this.changes.next({ value: this.value, ...this.getChanges() });
   }
@@ -216,8 +220,10 @@ class Control {
         break;
     }
     if (test) {
+      console.log("TEST IS TRUE");
       this.updateControl(this.state.then);
     } else {
+      console.log("TEST IS FALSE", this.state.curr);
       this.updateControl(this.state.curr);
     }
   }
@@ -226,20 +232,19 @@ class Control {
 interface UseFormControl {
   name: string;
   label?: string;
+  debounceTime?: number;
 }
 
-export const useFormControl = ({ name, label }: UseFormControl) => {
+export const useFormControl = ({ name, label, debounceTime = 400 }: UseFormControl) => {
   const { formGroup } = useFormContext();
-  const [onchange, test] = [useDebouce(), useDebouce()];
-  const formControl = useRef(formGroup.getControl(name)).current;
+
   const controller = useRef({
+    control: formGroup.getControl(name),
     setValue(value: any) {
-      formControl.setValue(value);
-      setValue(value);
+      this.control.setValue(value);
     },
     onMount() {
-      console.log(name, formControl);
-      formControl.changes.subscribe(({ value, disabled, error }) => {
+      this.control.changes.subscribe(({ value, disabled, error }) => {
         setValue(value);
         setDisabled(disabled);
         setError(error[0]);
@@ -247,9 +252,11 @@ export const useFormControl = ({ name, label }: UseFormControl) => {
     },
   }).current;
 
-  const [value, setValue] = useState(formControl.value);
-  const [disabled, setDisabled] = useState(formControl.disabled);
-  const [error, setError] = useState(formControl.error[0]);
+  const [value, setValue] = useState(controller.control.value);
+  const [disabled, setDisabled] = useState(controller.control.disabled);
+  const [error, setError] = useState(controller.control.error[0]);
+
+  const debouncer = useDebouncer();
 
   useEffect(() => {
     controller.onMount();
@@ -262,11 +269,6 @@ export const useFormControl = ({ name, label }: UseFormControl) => {
       disabled,
       onChange(event: any) {
         const value = event.target ? event.target.value : event;
-        if (event.target) {
-          console.log(event.target["type"]);
-          _.cancel();
-          _.debounce(() => console.log(value), 400);
-        }
         controller.setValue(value);
       },
     },
