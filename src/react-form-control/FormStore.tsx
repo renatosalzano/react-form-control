@@ -1,8 +1,18 @@
 /* eslint-disable no-eval */
-import { useContext, createContext, createElement, FC, useRef, useState, useEffect } from "react";
+import {
+  useContext,
+  createContext,
+  createElement,
+  FC,
+  useRef,
+  useState,
+  useEffect,
+  useCallback,
+  FormEvent,
+} from "react";
 
 import { FormControl, FormControlThenOptions, Modifiers } from "./FormControl";
-import { useDebouce, useDebouncer, useDebounceState } from "./hooks/useDebounce";
+import { useDebounce } from "./hooks/useDebounce";
 import { isEqual } from "./util/isEqual";
 import { splitObject } from "./util/splitObject";
 
@@ -24,14 +34,14 @@ const FormContext = createContext<FormStoreContext>({} as FormStoreContext);
 const useFormContext = () => useContext(FormContext);
 export const FormStore: FC<FormStoreProps> = ({ schema, children }) => {
   const formGroup = useRef(new FormGroup(schema)).current;
-  return createElement(FormContext.Provider, { value: { formGroup } }, children);
+
+  return <FormContext.Provider value={{ formGroup }}>{children}</FormContext.Provider>;
 };
 
 class FormGroup {
   public values: AnyObject;
   private controls: { [key: string]: Control } = {};
   private path: { [key: string]: Control } = {};
-  public slice: { [key: string]: SliceControl } = {};
 
   constructor(schema: { [key: string]: any }) {
     if (schema && typeof schema === "object") {
@@ -65,7 +75,6 @@ class FormGroup {
       return result;
     }, []);
   }
-
   private injectDependencies(control: Control) {
     if (control.hasModifiers()) {
       for (const name of control.getDependencies()) {
@@ -82,13 +91,31 @@ class FormGroup {
       return new Control();
     }
   }
-}
-
-class SliceControl {
-  constructor(schema: { [key: string]: any }) {
-    console.log(schema);
+  public validateOnSubmit() {
+    for (const field in this.controls) {
+      this.controls[field].validate();
+    }
   }
 }
+interface FormProps {
+  onSubmit: (value?: any) => void;
+}
+export const Form: FC<FormProps> = ({ onSubmit, children }) => {
+  const { formGroup } = useFormContext();
+
+  const handleSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      if (onSubmit) {
+        formGroup.validateOnSubmit();
+        onSubmit(formGroup.values);
+      }
+    },
+    [formGroup, onSubmit],
+  );
+
+  return <form onSubmit={handleSubmit}>{children}</form>;
+};
 
 interface ThenOptions extends FormControlThenOptions {
   reset?: true;
@@ -160,7 +187,6 @@ class Control {
   }
 
   private updateControl(options: Partial<ThenOptions>) {
-    console.log(options);
     if (options?.reset) return this.reset();
     if (options?.value !== undefined) this.value = options.value;
     if (options?.validator) this.validator = options.validator;
@@ -177,6 +203,7 @@ class Control {
 
   public setValue(value: any) {
     this.value = value;
+    this.validate();
     this.next();
   }
   public setError(message: string[]) {
@@ -184,12 +211,23 @@ class Control {
     this.next();
   }
 
+  public validate() {
+    if (this.validator) {
+      const errors = this.validator.validate(this.value);
+      if (errors.length) {
+        this.error = [true, errors];
+      } else {
+        this.error = [false, []];
+      }
+      this.next();
+    }
+  }
+
   private next() {
     const value = this.value;
     const currentState = { value, ...this.getChanges() };
     this.valueChanges.next(value);
     this.changes.next(currentState);
-    this.state.curr = currentState;
   }
 
   public reset() {}
@@ -220,10 +258,12 @@ class Control {
         break;
     }
     if (test) {
-      console.log("TEST IS TRUE");
+      this.state.curr = { ...this.getChanges() };
+      console.log("TEST IS TRUE", this.state);
+
       this.updateControl(this.state.then);
     } else {
-      console.log("TEST IS FALSE", this.state.curr);
+      console.log("TEST IS FALSE", this.state);
       this.updateControl(this.state.curr);
     }
   }
@@ -232,10 +272,10 @@ class Control {
 interface UseFormControl {
   name: string;
   label?: string;
-  debounceTime?: number;
+  debounceDelay?: number;
 }
 
-export const useFormControl = ({ name, label, debounceTime = 400 }: UseFormControl) => {
+export const useFormControl = ({ name, label, debounceDelay = 400 }: UseFormControl) => {
   const { formGroup } = useFormContext();
 
   const controller = useRef({
@@ -247,16 +287,16 @@ export const useFormControl = ({ name, label, debounceTime = 400 }: UseFormContr
       this.control.changes.subscribe(({ value, disabled, error }) => {
         setValue(value);
         setDisabled(disabled);
-        setError(error[0]);
+        setError(error);
       });
     },
   }).current;
 
   const [value, setValue] = useState(controller.control.value);
   const [disabled, setDisabled] = useState(controller.control.disabled);
-  const [error, setError] = useState(controller.control.error[0]);
+  const [error, setError] = useState(controller.control.error);
 
-  const debouncer = useDebouncer();
+  const debounce = useDebounce();
 
   useEffect(() => {
     controller.onMount();
@@ -272,5 +312,7 @@ export const useFormControl = ({ name, label, debounceTime = 400 }: UseFormContr
         controller.setValue(value);
       },
     },
+    error: error[0],
+    errorMessage: error[1],
   };
 };

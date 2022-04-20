@@ -7,6 +7,11 @@ interface Props {
 }
 
 export const ControlledTextInput: FC<Props> = ({ name, value }) => {
-  const { control } = useFormControl({ name });
-  return <input type="text" {...control} />;
+  const { control, errorMessage } = useFormControl({ name });
+  return (
+    <div className="input-test">
+      <input type="text" {...control} />
+      <small>{errorMessage[0]}</small>
+    </div>
+  );
 };

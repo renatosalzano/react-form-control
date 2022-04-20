@@ -1,42 +1,67 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 
-export class Debounce {
-  private timeout: NodeJS.Timeout;
-  constructor() {
-    this.timeout = setTimeout(() => null, 0);
+class Debounce {
+  timeout?: NodeJS.Timeout;
+  fn: (...args: any[]) => void;
+  delay: number;
+
+  constructor(fn: (...args: any[]) => void, delay: number) {
+    this.fn = fn;
+    this.delay = delay;
   }
-  debounce(callback: (...args: any[]) => any, delay: number) {
-    this.timeout = setTimeout(callback, delay);
-    return this.timeout;
+
+  debounce(instance: Debounce[], index: number) {
+    this.cancel();
+    this.timeout = setTimeout(() => {
+      this.fn();
+      this.clear(instance, index);
+    }, this.delay);
   }
+
   cancel() {
-    clearTimeout(this.timeout);
+    if (this.timeout) clearTimeout(this.timeout);
+  }
+  call(instance: Debounce[], index: number) {
+    this.cancel();
+    this.fn();
+    this.clear(instance, index);
+  }
+  clear(instance: Debounce[], index: number) {
+    instance.splice(index, 1);
+  }
+  stop(instance: Debounce[], index: number) {
+    this.cancel();
+    this.clear(instance, index);
+  }
+  equalDebounce(fn: (...args: any[]) => void, delay: number) {
+    const fnEqual = this.fn.toString() === fn.toString();
+    const delayEqual = this.delay === delay;
+    return fnEqual && delayEqual;
   }
 }
 
-export function useDebouce() {
-  const debounce = useRef(new Debounce());
-  return debounce.current;
-}
+export function useDebounce() {
+  const ref = useRef({
+    instance: [] as Debounce[],
+    debounce(fn: (...args: any[]) => void, delay: number) {
+      const instance = this.instance;
+      let index = instance.findIndex((i) => i.equalDebounce(fn, delay));
+      if (index !== -1) {
+      } else {
+        index = instance.push(new Debounce(fn, delay)) - 1;
+      }
+      instance[index].debounce(instance, index);
 
-export function useDebouncer() {
-  const ref = useRef(new Debounce());
-  const debouncer = useCallback((callback: (...args: any[]) => any, time: number) => {
-    ref.current.cancel();
-    ref.current.debounce(callback, time);
-  }, []);
-  return debouncer;
-}
-
-export function useDebounceState<T>(initState: T, timer: number): [T, (value: T) => void] {
-  const [state, setState] = useState<T>(initState);
-  const ref = useRef(new Debounce());
-  const debounceDispatch = useCallback(
-    (value: T) => {
-      ref.current.cancel();
-      ref.current.debounce(() => setState(value), timer);
+      return {
+        call() {
+          instance[index].call(instance, index);
+        },
+        cancel() {
+          instance[index].stop(instance, index);
+        },
+      };
     },
-    [timer],
-  );
-  return [state, debounceDispatch];
+  });
+
+  return ref.current.debounce.bind(ref.current);
 }

@@ -51,17 +51,18 @@ export class FormControl {
   };
   private thenOptions: ThenOptions = {};
 
-  constructor(stateValue: any, options?: FormControlOptions) {
+  constructor(stateValue: any, options?: FormControlOptions | AnySchema) {
     this.value = stateValue;
     switch (this.checkOptions(options)) {
       case "validator":
-        this.validator = options;
+        this.validator = options as AnySchema;
         break;
       case "options":
-        if (options?.validator) this.validator = options?.validator;
-        if (options?.touched) this.touched = options?.touched;
-        if (options?.disabled) this.disabled = options?.disabled;
-        if (options?.requiredGroup) this.requiredGroup = options?.requiredGroup;
+        const _ = options as FormControlOptions;
+        if (_?.validator) this.validator = _?.validator;
+        if (_?.touched) this.touched = _?.touched;
+        if (_?.disabled) this.disabled = _?.disabled;
+        if (_?.requiredGroup) this.requiredGroup = _?.requiredGroup;
     }
   }
 

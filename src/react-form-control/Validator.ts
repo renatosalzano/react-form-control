@@ -19,6 +19,7 @@ class Schema<T> {
   public validate(value: T, abortEarly = false) {
     this.errors = [];
     this.rules.forEach((rule) => rule(value));
+    return this.errors;
   }
   public resolve() {
     return { valid: this.valid, errors: this.errors };
@@ -29,9 +30,19 @@ export class StringSchema extends Schema<string> {
   required(message?: string) {
     return super.required(message);
   }
+  validate(value: any) {
+    return super.validate(value);
+  }
 }
 
-export class NumberSchema {}
+export class NumberSchema extends Schema<number> {
+  required(message?: string) {
+    return super.required(message);
+  }
+  validate(value: any) {
+    return super.validate(value);
+  }
+}
 
 export class Validator {
   static string() {
