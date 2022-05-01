@@ -2,7 +2,6 @@
 import {
   useContext,
   createContext,
-  createElement,
   FC,
   useRef,
   useState,
@@ -17,7 +16,7 @@ import { isEqual } from "./util/isEqual";
 import { splitObject } from "./util/splitObject";
 
 import { Subject } from "./util/Subject";
-import { AnySchema } from "./Validator";
+import { ValidateSchema, AnySchema } from "./Validator";
 
 interface AnyObject {
   [key: string]: any;
@@ -150,7 +149,7 @@ class Control {
     hasModifiers: false,
   };
   public value: any = null;
-  public validator?: AnySchema;
+  public validator?: ValidateSchema;
   public touched = false;
   public disabled = false;
   public error: [boolean, string[]] = [false, []];
@@ -189,7 +188,7 @@ class Control {
   private updateControl(options: Partial<ThenOptions>) {
     if (options?.reset) return this.reset();
     if (options?.value !== undefined) this.value = options.value;
-    if (options?.validator) this.validator = options.validator;
+    if (options?.validator) this.validator = new ValidateSchema(options.validator);
     if (options?.touched !== undefined) this.touched = options.touched;
     if (options?.disabled !== undefined) this.disabled = options.disabled;
     if (options?.requiredGroup) this.requiredGroup = options.requiredGroup;
@@ -213,7 +212,7 @@ class Control {
 
   public validate() {
     if (this.validator) {
-      const errors = this.validator.validate(this.value);
+      const {valid, errors} = this.validator.validate(this.value);
       if (errors.length) {
         this.error = [true, errors];
       } else {

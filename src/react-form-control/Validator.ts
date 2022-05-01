@@ -1,12 +1,12 @@
 export type AnySchema = StringSchema | NumberSchema;
 
 class Schema<T> {
-  private valid = false;
-  private errors: string[] = [];
-  private rules: ((value: T) => void)[] = [];
+  public valid = false;
+  public errors: string[] = [];
+  public rules: ((value: any) => void)[] = [];
 
   public required(message = "Required") {
-    this.rules.unshift((value: T) => {
+    this.rules.unshift((value: any) => {
       if (value) {
         this.valid = true;
       } else {
@@ -16,31 +16,17 @@ class Schema<T> {
     });
     return this;
   }
-  public validate(value: T, abortEarly = false) {
-    this.errors = [];
-    this.rules.forEach((rule) => rule(value));
-    return this.errors;
-  }
-  public resolve() {
-    return { valid: this.valid, errors: this.errors };
-  }
 }
 
 export class StringSchema extends Schema<string> {
   required(message?: string) {
     return super.required(message);
   }
-  validate(value: any) {
-    return super.validate(value);
-  }
 }
 
 export class NumberSchema extends Schema<number> {
   required(message?: string) {
     return super.required(message);
-  }
-  validate(value: any) {
-    return super.validate(value);
   }
 }
 
@@ -50,9 +36,17 @@ export class Validator {
   }
 }
 
-export class TestSchema extends Schema<any> {
-  validate(value: any, abortEarly = false) {
-    return super.validate(value, abortEarly);
+export class ValidateSchema {
+  constructor(private schema: AnySchema) {}
+
+  validate(value: any) {
+    this.schema.valid = true;
+    this.schema.errors = [];
+    this.schema.rules.forEach((rule) => rule(value));
+    return {
+      valid: this.schema.valid,
+      errors: this.schema.errors,
+    };
   }
 }
 
